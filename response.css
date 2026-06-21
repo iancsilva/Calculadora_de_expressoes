@@ -1,0 +1,33 @@
+@media (max-width: 900px) {
+  .app {
+    width: 320px;
+    overflow: hidden;
+    border-radius: 18px;
+  }
+
+  .history-panel {
+    position: absolute;
+    left: 0;
+    top: 145px;
+    width: 100%;
+    bottom: 0;
+    padding-bottom: 50px;
+    display: block;
+    z-index: 20;
+    border-radius: 0 0 18px 18px;
+    overflow: hidden;
+    transform: translateX(-100%);
+    pointer-events: none;
+    transition: transform 0.3s ease;
+  }
+
+  .history-panel.open {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .history-list {
+    height: 100%;
+    max-height: none;
+  }
+}
