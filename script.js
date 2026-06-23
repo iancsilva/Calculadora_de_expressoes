@@ -1,12 +1,16 @@
 const screen = document.querySelector(".screen");
 const historyPanel = document.querySelector(".history-panel");
 const historyList = document.querySelector(".history-list");
-const btnHistory = document.querySelector(".history-btn");
-const btnsActions = document.querySelectorAll(".actions");
-const btns = document.querySelectorAll(".digit");
-var expressao = "";
+const historyButton = document.querySelector(".history-btn");
+const actionButtons = document.querySelectorAll(".actions");
+const digitButtons = document.querySelectorAll(".digit");
 
-function addToHistory(exp, duringLoading = false) {
+const NUMBER_REGEX = /^[\+\-]?\d+(\.\d+)?$/;
+const OPERATOR_REGEX = /[\^*\/%+\-.]/;
+const NON_LEADING_OPERATOR_REGEX = /[\^*\/%+.]/;
+const PARENTHESIZED_OPERATION_REGEX = /\([\+\-]?\d+(\.\d+)?(.\d+(\.\d+)?)*\)/g;
+
+function addToHistory(exp) {
     const li = document.createElement("li");
 
     const expression = document.createElement("span");
@@ -21,119 +25,122 @@ function addToHistory(exp, duringLoading = false) {
         li.classList.toggle("expanded");
     });
 
-    if (duringLoading) {
-        fragment.prepend(li);
-    } else {
-        historyList.append(li);
-    }
+    return li;
 }
 
 const history = JSON.parse(localStorage.getItem("history")) || [];
 
 const fragment = document.createDocumentFragment();
 
-for(item of history){
-    addToHistory(item, true);
+for (const item of history) {
+    fragment.prepend(addToHistory(item));
 }
-historyList.append(fragment)
 
+historyList.append(fragment);
 
-btnHistory.addEventListener("click", () => {
-     historyPanel.classList.toggle("open");
-})
+historyButton.addEventListener("click", () => {
+    historyPanel.classList.toggle("open");
 
-btnsActions.forEach((btn, i) => {
-    btn.addEventListener("click", () => {
-        switch (i) {
-        case 0:
-            screen.value = "";
-            break;
-
-        case 1: 
-            screen.value = screen.value.slice(0, -1);
-            break;
-        
-        case 2:
-            history.push({expression: screen.value});
-            screen.value = calculaExpressao(screen.value);
-            history.at(-1).result = screen.value;
-            addToHistory(history.at(-1))
-            localStorage.setItem("history",JSON.stringify(history));
-            break;
+    if (historyPanel.classList.contains("open")) {
+        historyList.scrollTop = historyList.scrollHeight;
     }
-    })
-    
 });
 
-btns.forEach(btn => {
-    btn.addEventListener("click", () => {
-        if((/[\^√*\/%+\-.]/.test(screen.value.at(-1)) && /[\^√*\/%+\-.]/.test(btn.textContent)) || (screen.value === "" && /[\^√*\/%+.]/.test(btn.textContent)) || (screen.value.at(-1) === "(" && /[\^√*\/%+.]/.test(btn.textContent))){ 
+actionButtons.forEach(button => {
+    button.addEventListener("click", () => {
+        const action = button.dataset.action;
+
+        switch (action) {
+            case "clear":
+                screen.value = "";
+                break;
+
+            case "backspace":
+                screen.value = screen.value.slice(0, -1);
+                break;
+
+            case "calculate":
+                history.push({ expression: screen.value });
+                screen.value = calculateExpression(screen.value);
+                history.at(-1).result = screen.value;
+                historyList.append(addToHistory(history.at(-1)));
+                historyList.scrollTop = historyList.scrollHeight;
+                localStorage.setItem("history", JSON.stringify(history));
+                break;
+        }
+    });
+});
+
+digitButtons.forEach(button => {
+    button.addEventListener("click", () => {
+        const buttonText = button.textContent;
+        const lastCharacter = screen.value.at(-1);
+        const lastIsOperator = OPERATOR_REGEX.test(lastCharacter);
+        const pressedIsOperator = OPERATOR_REGEX.test(buttonText);
+        const pressedCannotStartExpression = NON_LEADING_OPERATOR_REGEX.test(buttonText);
+        const isParenthesisButton = buttonText === "( )";
+        const openParenthesesCount = screen.value.split("(").length - 1;
+        const closeParenthesesCount = screen.value.split(")").length - 1;
+
+        if ((lastIsOperator && pressedIsOperator) || (screen.value === "" && pressedCannotStartExpression) || (lastCharacter === "(" && pressedCannotStartExpression)) {
             
-        }else if(btn.textContent === "( )" && (/[\^√*\/%+\-.]/.test(screen.value.at(-1)) || screen.value === "" || screen.value.at(-1) === "(") && screen.value.at(-1) !== "."){
-            screen.value += "("
+        } else if (isParenthesisButton && (lastIsOperator || screen.value === "" || lastCharacter === "(") && lastCharacter !== ".") {
+            screen.value += "(";
 
-        }else if(btn.textContent === "( )" && (!Number.isNaN(Number(screen.value.at(-1))) || screen.value.at(-1) === ")") && (screen.value.split(")").length - 1) < (screen.value.split("(").length - 1) && screen.value.at(-1) !== "."){
-            screen.value += ")"
+        } else if (isParenthesisButton && (!Number.isNaN(Number(lastCharacter)) || lastCharacter === ")") && closeParenthesesCount < openParenthesesCount && lastCharacter !== ".") {
+            screen.value += ")";
 
-        }else if(btn.textContent !== "( )"){
-            screen.value += btn.textContent;
+        } else if (!isParenthesisButton) {
+            screen.value += buttonText;
         }
 
         screen.scrollLeft = screen.scrollWidth;
-    })
+    });
 });
 
-const opcoesOperadores = {
-        "^": (a, b) => Number(a) ** Number(b),
-        "*": (a, b) => Number(a) * Number(b),
-        "/": (a, b) => Number(a) / Number(b),
-        "%": (a, b) => Number(a) % Number(b),
-        "+": (a, b) => Number(a) + Number(b),
-        "-": (a, b) => Number(a) - Number(b)
-    }
+const operatorOptions = {
+    "^": (a, b) => Number(a) ** Number(b),
+    "*": (a, b) => Number(a) * Number(b),
+    "/": (a, b) => Number(a) / Number(b),
+    "%": (a, b) => Number(a) % Number(b),
+    "+": (a, b) => Number(a) + Number(b),
+    "-": (a, b) => Number(a) - Number(b)
+};
 
-const prioridades = [["^"], ["*", "/", "%"], ["+", "-"]];
+const priorities = [["^"], ["*", "/", "%"], ["+", "-"]];
 
-function calculaExpressao(expressao){
+function calculateExpression(expression) {
+    while (!NUMBER_REGEX.test(expression)) {
+        let operations = expression.includes("(")? expression.match(PARENTHESIZED_OPERATION_REGEX) : [expression];
 
-    while(!/^[\+\-]?\d+(\.\d+)?$/.test(expressao)){
+        for (const operation of operations) {
+            let numbers = operation.split(/[^\d.]/).filter(n => n !== "");
+            let operators = operation.split(/\d+\.?|\(|\)/).filter(n => n !== "");
 
-         let operacoes = expressao.includes("(")? expressao.match(/\([\+\-]?\d+(\.\d+)?(.\d+(\.\d+)?)*\)/g) : [expressao];
-         console.log(operacoes)
+            if (numbers.length === operators.length) numbers.unshift("0");
 
-    for(let operacao of operacoes){
-
-        let numeros = operacao.split(/[^\d.]/).filter(n => n !== "");
-        let operadores = operacao.split(/\d+\.?|\(|\)/).filter(n => n !== "");
-
-        if(numeros.length === operadores.length) numeros.unshift("0");
-
-        operadores.forEach((o, i) => {
-            if(o.length === 2){
-                operadores[i] = o[0];
-                numeros[i + 1] = "-"+numeros[i + 1];
-            }
-        })
-
-        for(let prioridade of prioridades){
-
-            operadores.forEach((o, indice) => {
-                if(prioridade.includes(o)) {
-                    let calculo = opcoesOperadores[o](numeros[indice], numeros[indice + 1]);
-                    numeros.splice(indice, 2, "x", calculo)
+            operators.forEach((operator, index) => {
+                if (operator.length === 2) {
+                    operators[index] = operator[0];
+                    numbers[index + 1] = "-" + numbers[index + 1];
                 }
-            })
-            numeros = numeros.filter(n => n !== "x")
-            operadores = operadores.filter(o => !prioridade.includes(o))
+            });
 
+            for (const priority of priorities) {
+                operators.forEach((operator, index) => {
+                    if (priority.includes(operator)) {
+                        let calculation = operatorOptions[operator](numbers[index], numbers[index + 1]);
+                        numbers.splice(index, 2, "x", calculation);
+                    }
+                });
+
+                numbers = numbers.filter(n => n !== "x");
+                operators = operators.filter(operator => !priority.includes(operator));
+            }
+
+            expression = expression.replace(operation, numbers[0]);
         }
-
-        expressao = expressao.replace(operacao, numeros[0]);
-
     }
+
+    return expression;
 }
-    return expressao
-
-    }
-
-    
